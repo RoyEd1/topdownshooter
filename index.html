@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Chicken Treadmill Invaders</title>
+<style>
+  body { margin: 0; overflow: hidden; background-color: #f0e68c; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+  canvas { background-color: #228b22; display: block; }
+</style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let gameWidth;
+    let gameHeight;
+    let player;
+    let bullets = [];
+    let enemies = [];
+    let score = 0;
+    let gameInterval;
+    let lastShotTime = 0;
+    const playerSpeed = 5;
+    const bulletSpeed = -10;
+    const playerWidth = 50;
+    const playerHeight = 30;
+    const bulletRadius = 5;
+    const playerColor = 'blue';
+    const bulletColor = 'yellow';
+    const enemyWidth = 40;
+    const enemyHeight = 30;
+    const enemyColor = 'red';
+    let enemySpeed = 1;
+    let wave = 1;
+    let lastWaveIncreaseTime = 0;
+    const waveIncreaseInterval = 30000; // 30 seconds
+    let isGameOver = false;
+    let touchStartX = null;
+
+    function resizeCanvas() {
+      canvas.width = Math.min(window.innerWidth, 600);
+      canvas.height = Math.min(window.innerHeight, 800);
+      gameWidth = canvas.width;
+      gameHeight = canvas.height;
+      player.x = (gameWidth - playerWidth) / 2;
+      player.y = gameHeight - playerHeight - 20;
+    }
+
+    class Player {
+      constructor(x, y, width, height, color) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.color = color;
+      }
+
+      draw() {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+      }
+
+      moveLeft() {
+        this.x = Math.max(0, this.x - playerSpeed);
+      }
+
+      moveRight() {
+        this.x = Math.min(gameWidth - this.width, this.x + playerSpeed);
+      }
+    }
+
+    class Bullet {
+      constructor(x, y, radius, color, speed) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.color = color;
+        this.speed = speed;
+      }
+
+      draw() {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      update() {
+        this.y += this.speed;
+      }
+    }
+
+    class Enemy {
+      constructor(x, y, width, height, color, speed) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.color = color;
+        this.speed = speed;
+      }
+
+      draw() {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+      }
+
+      update() {
+        this.y += this.speed;
+      }
+    }
+
+    function spawnEnemies(count) {
+      const enemySpacingX = enemyWidth * 1.5;
+      const startX = (gameWidth - (count - 1) * enemySpacingX) / 2;
+      for (let i = 0; i < count; i++) {
+        const x = startX + i * enemySpacingX;
+        const y = -enemyHeight;
+        enemies.push(new Enemy(x, y, enemyWidth, enemyHeight, enemyColor, enemySpeed));
+      }
+    }
+
+    function shoot() {
+      const currentTime = Date.now();
+      if (currentTime - lastShotTime > 300) {
+        bullets.push(new Bullet(player.x + playerWidth / 2, player.y, bulletRadius, bulletColor, bulletSpeed));
+        lastShotTime = currentTime;
+      }
+    }
+
+    function updateGame() {
+      if (isGameOver) return;
+
+      ctx.clearRect(0, 0, gameWidth, gameHeight);
+
+      player.draw();
+      shoot();
+
+      // Update and draw bullets
+      bullets.forEach((bullet, index) => {
+        bullet.update();
+        bullet.draw();
+        if (bullet.y < 0) {
+          bullets.splice(index, 1);
+        }
+      });
+
+      // Update and draw enemies
+      enemies.forEach((enemy, index) => {
+        enemy.update();
+        enemy.draw();
+
+        // Collision detection with bullets
+        bullets.forEach((bullet, bulletIndex) => {
+          if (
+            bullet.x > enemy.x &&
+            bullet.x < enemy.x + enemy.width &&
+            bullet.y > enemy.y &&
+            bullet.y < enemy.y + enemy.height
+          ) {
+            enemies.splice(index, 1);
+            bullets.splice(bulletIndex, 1);
+            score++;
+          }
+        });
+
+        // Check if enemy reached the bottom
+        if (enemy.y > gameHeight) {
+          gameOver();
+        }
+      });
+
+      // Remove off-screen enemies
+      enemies = enemies.filter(enemy => enemy.y <= gameHeight);
+
+      // Check if wave is cleared
+      if (enemies.length === 0) {
+        wave++;
+        enemySpeed *= 1.1; // Increase enemy speed
+        spawnEnemies(Math.floor(5 + wave * 0.5)); // Increase enemy count
+      }
+
+      // Increase difficulty over time
+      const currentTime = Date.now();
+      if (currentTime - lastWaveIncreaseTime > waveIncreaseInterval) {
+        enemySpeed *= 1.05; // Slightly increase speed over time
+        spawnEnemies(Math.floor(5 + wave * 0.5)); // Add more enemies periodically
+        lastWaveIncreaseTime = currentTime;
+      }
+
+      // Draw score
+      ctx.fillStyle = 'white';
+      ctx.font = '16px Arial';
+      ctx.fillText(`Score: ${score}`, 10, 20);
+      ctx.fillText(`Wave: ${wave}`, 10, 40);
+    }
+
+    function gameOver() {
+      isGameOver = true;
+      clearInterval(gameInterval);
+      ctx.fillStyle = 'black';
+      ctx.fillRect(0, 0, gameWidth, gameHeight);
+      ctx.fillStyle = 'white';
+      ctx.font = '30px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('Game Over!', gameWidth / 2, gameHeight / 2 - 20);
+      ctx.font = '20px Arial';
+      ctx.fillText(`Score: ${score}`, gameWidth / 2, gameHeight / 2 + 20);
+      ctx.textAlign = 'start'; // Reset text alignment
+    }
+
+    function resetGame() {
+      score = 0;
+      wave = 1;
+      enemySpeed = 1;
+      bullets = [];
+      enemies = [];
+      isGameOver = false;
+      lastWaveIncreaseTime = Date.now();
+      spawnEnemies(5);
+      clearInterval(gameInterval);
+      gameInterval = setInterval(updateGame, 1000 / 60);
+    }
+
+    // Touch event handlers
+    canvas.addEventListener('touchstart', (e) => {
+      touchStartX = e.touches[0].clientX;
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (touchStartX === null) return;
+
+      const touchX = e.touches[0].clientX;
+      const deltaX = touchX - touchStartX;
+
+      if (deltaX > 0) {
+        player.moveRight();
+      } else if (deltaX < 0) {
+        player.moveLeft();
+      }
+
+      touchStartX = touchX;
+      e.preventDefault(); // Prevent scrolling
+    });
+
+    canvas.addEventListener('touchend', () => {
+      touchStartX = null;
+    });
+
+    // Initial setup
+    function init() {
+      resizeCanvas();
+      player = new Player((gameWidth - playerWidth) / 2, gameHeight - playerHeight - 20, playerWidth, playerHeight, playerColor);
+      spawnEnemies(5);
+      gameInterval = setInterval(updateGame, 1000 / 60);
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    init();
+  </script>
+</body>
+</html>
